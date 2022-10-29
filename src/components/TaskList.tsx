@@ -1,36 +1,39 @@
-import React, { useState } from "react";
-import { StyleSheet, Text, View, FlatList } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, Text, View, FlatList, RefreshControl } from "react-native";
 import { Dim } from "../Constants";
+import {
+  getTasks,
+  addTask,
+  editTask,
+  removeTask,
+} from "../helpers/TaskMethods";
 import CreateTaskButton from "./CreateTaskButton";
 import EditModal from "./EditModal";
 import TaskItem from "./TaskItem";
 
-interface TaskListProps {}
+export interface User {
+  _id: string;
+  username: string;
+}
+interface TaskListProps {
+  user: User;
+}
 
 const TaskList = (props: TaskListProps) => {
-  const [tasks, setTasks] = useState([
-    { id: 1, name: "Task 1" },
-    { id: 2, name: "Task 2" },
-    { id: 3, name: "Task 3" },
-    { id: 4, name: "Task 4" },
-    { id: 5, name: "Task 5" },
-    { id: 6, name: "Task 6" },
-    { id: 7, name: "Task 7" },
-    { id: 8, name: "Task 8" },
-    { id: 9, name: "Task 9" },
-    { id: 10, name: "Task 10" },
-    { id: 11, name: "Task 11" },
-    { id: 12, name: "Task 12" },
-    { id: 13, name: "Task 13" },
-    { id: 14, name: "Task 14" },
-    { id: 15, name: "Task 15" },
-    { id: 16, name: "Task 16" },
-    { id: 17, name: "Task 17" },
-  ]);
+  const [tasks, setTasks] = useState([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editingId, setEditingId] = useState(0);
+  const [editingId, setEditingId] = useState("");
   const [textEntry, setTextEntry] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      if (props.user._id) {
+        const tasks = await getTasks(props.user._id);
+        setTasks(tasks);
+      }
+    })();
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>
@@ -41,31 +44,56 @@ const TaskList = (props: TaskListProps) => {
           setEditModalVisible(false);
           setTextEntry("");
           setEditing(false);
-          setEditingId(0);
+          setEditingId("");
         }}
-        onPressSave={() => {
+        onPressSave={async () => {
           // if editing, update the task
           if (editing) {
-            const newTasks = tasks.map((task) => {
-              if (task.id === editingId) {
-                return { ...task, name: textEntry };
-              }
-              return task;
-            });
-            setTasks(newTasks);
+            const editTaskResponse = await editTask(editingId, textEntry);
+            if (editTaskResponse) {
+              console.log("here");
+              const newTasks = tasks.map((task) => {
+                if (task._id === editingId) {
+                  return { ...task, taskName: textEntry };
+                }
+                return task;
+              });
+              setTasks(newTasks);
+            } else {
+              alert("Unable to edit task. Please try again.");
+            }
           } else {
-            setTasks([...tasks, { id: tasks.length + 1, name: textEntry }]);
-            // TODO: change this when using db _id fields
+            // create new task
+            const addTaskResponse = await addTask(props.user._id, textEntry);
+            if (addTaskResponse) {
+              setTasks([...tasks, addTaskResponse]);
+            } else {
+              alert("Failed to add task. Please try again.");
+            }
           }
           setEditModalVisible(false);
           setTextEntry("");
           setEditing(false);
-          setEditingId(0);
+          setEditingId("");
         }}
         editing={editing}
         setTextEntry={setTextEntry}
       />
+      {props.user ? (
+        <Text style={{ fontSize: 24, paddingVertical: 5, textAlign: "center" }}>
+          {props.user.username}'s tasks
+        </Text>
+      ) : null}
       <FlatList
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={async () => {
+              const tasks = await getTasks(props.user._id);
+              setTasks(tasks);
+            }}
+          />
+        }
         style={{
           width: Dim.width,
           //   backgroundColor: "red",
@@ -82,18 +110,28 @@ const TaskList = (props: TaskListProps) => {
               // Editing state tells EditModal whether to edit
               // existing task or create new task
               setEditing(true);
-              setEditingId(item.id);
+              setEditingId(item._id);
               setEditModalVisible(true);
-              setTextEntry(item.name);
+              setTextEntry(item.taskName);
             }}
-            name={item.name}
-            onPressDelete={() => {
-              const newTasks = tasks.filter((task) => task.id !== item.id);
-              setTasks(newTasks);
+            name={item.taskName}
+            onPressDelete={async () => {
+              const removeTaskResponse = await removeTask(item._id);
+              if (removeTaskResponse) {
+                const newTasks = tasks.filter((task) => task._id !== item._id);
+                setTasks(newTasks);
+              } else {
+                alert("Failed to delete task. Please try again.");
+              }
             }}
           />
         )}
-        keyExtractor={(item): string => item.id.toString()}
+        keyExtractor={(item): string => item._id.toString()}
+        ListEmptyComponent={() => (
+          <Text style={{ fontSize: 18, marginBottom: 10 }}>
+            You don't have any tasks yet.
+          </Text>
+        )}
         ListFooterComponent={
           <CreateTaskButton
             onPress={() => {

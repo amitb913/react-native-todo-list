@@ -11,3 +11,5 @@ export const Dim: { [key: string]: number } = {
   width: Dimensions.get("window").width,
   height: Dimensions.get("window").height,
 };
+
+export const API_URL = "http://localhost:3000"; // <--- Change this to your server address
